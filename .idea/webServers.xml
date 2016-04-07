@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="d1bf9ebc-d789-44de-a6e2-48561eebfbe3" name="76开发机" url="http://10.6.131.76">
+        <fileTransfer host="10.6.131.76" port="22" rootFolder="/data01/home/wuxian" accessType="SFTP" username="wuxian">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
