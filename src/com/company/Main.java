@@ -10,7 +10,7 @@ public class Main {
 
     public static void main(String[] args) throws IOException, InterruptedException {
         Perceptron p = new Perceptron();
-        p.Train(new File("data/trn.txt"), 1, 100, 10, 24);
+        p.Train(new File("data/trn.txt"), 1, 60, 300, 24);
         p.LoadModel(new File("result/model.txt"));
         File file = new File("data/dev.wrd");
         File ofile = new File("result/dev.rst");

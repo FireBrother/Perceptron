@@ -199,6 +199,7 @@ public class Perceptron {
             for (int i = 0; i < numThreads; i++) {
                 final int finalI = i;
                 final int finalIter = iter;
+                final double finalLearningRate = learningRate;
                 pool.submit(
                         new Thread () {
                             public void run() {
@@ -210,11 +211,11 @@ public class Perceptron {
                                     writeLock.lock();
                                     err[0] += featureTrue.absSum();
                                     finishedSentences[0] += 1;
-                                    if ((finishedSentences[0] + 1) % 1000 == 0)
-                                    System.out.println(String.format("Iter %d: %d/%d ", finalIter,
-                                            finishedSentences[0] +1, sentences.length));
+//                                    if ((finishedSentences[0] + 1) % 1000 == 0)
+//                                    System.out.println(String.format("Iter %d: %d/%d ", finalIter,
+//                                            finishedSentences[0] +1, sentences.length));
                                     writeLock.unlock();
-                                    threadModels[finalI].PlusAssign(featureTrue.DotProductAssign(learningRate));
+                                    threadModels[finalI].PlusAssign(featureTrue.DotProductAssign(finalLearningRate));
                                 }
                             }
                         }
@@ -222,8 +223,8 @@ public class Perceptron {
             }
             pool.shutdown();
             while (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
-                System.out.println(String.format("60s report: Iter %d: %d/%d ", iter,
-                        finishedSentences[0] +1, sentences.length));
+//                System.out.println(String.format("60s report: Iter %d: %d/%d ", iter,
+//                        finishedSentences[0] +1, sentences.length));
             }
             for (Feature model : threadModels) {
                 _model.PlusAssign(model);
@@ -233,9 +234,12 @@ public class Perceptron {
             }
             aveModel.PlusAssign(_model);
             long endTime = System.currentTimeMillis();
-            System.out.println(String.format("Iter %d: err: %.2f time: %.3fs", iter, err[0], (endTime-startTime)/1000.0));
+            System.out.println(String.format("Iter %d: err: %.2f time: %.3fs lrate: %.3f",
+                    iter, err[0], (endTime-startTime)/1000.0, learningRate));
             if (Math.abs(preErr - err[0]) < thresh)
                 break;
+            if (preErr < err[0])
+                learningRate *= 0.8;
             preErr = err[0];
         }
         aveModel.DotProductAssign(1.0/(sentences.length*iter));
@@ -266,6 +270,7 @@ public class Perceptron {
             for (int i = 0; i < sentences.length; i++) {
                 final int finalI = i;
                 final int finalIter = iter;
+                final double finalLearningRate = learningRate;
                 pool.submit(
                         new Thread() {
                             public void run() {
@@ -277,11 +282,11 @@ public class Perceptron {
                                 featureTrue.MinusAssign(featureStar);
                                 writeLock.lock();
                                 err[0] += featureTrue.absSum();
-                                _model.PlusAssign(featureTrue.DotProductAssign(learningRate));
-                                if ((finishedThreads[0] + 1) % 1000 == 0)
-                                    System.out.println(String.format("Iter %d: %d/%d ", finalIter,
-                                            finishedThreads[0] +1, sentences.length));
-                                finishedThreads[0] += 1;
+                                _model.PlusAssign(featureTrue.DotProductAssign(finalLearningRate));
+//                                if ((finishedThreads[0] + 1) % 1000 == 0)
+//                                    System.out.println(String.format("Iter %d: %d/%d ", finalIter,
+//                                            finishedThreads[0] +1, sentences.length));
+//                                finishedThreads[0] += 1;
                                 writeLock.unlock();
                             }
                         }
@@ -289,14 +294,17 @@ public class Perceptron {
             }
             pool.shutdown();
             while (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
-                System.out.println(String.format("60s report: Iter %d: %d/%d ", iter,
-                        finishedThreads[0] +1, sentences.length));
+//                System.out.println(String.format("60s report: Iter %d: %d/%d ", iter,
+//                        finishedThreads[0] +1, sentences.length));
             }
             aveModel.PlusAssign(_model);
             long endTime = System.currentTimeMillis();
-            System.out.println(String.format("Iter %d: err: %.2f time: %.3fs", iter, err[0], (endTime-startTime)/1000.0));
+            System.out.println(String.format("Iter %d: err: %.2f time: %.3fs lrate: %.3f",
+                    iter, err[0], (endTime-startTime)/1000.0, learningRate));
             if (Math.abs(preErr - err[0]) < thresh)
                 break;
+            if (preErr < err[0])
+                learningRate *= 0.8;
             preErr = err[0];
         }
         aveModel.DotProductAssign(1.0/(sentences.length*iter));
