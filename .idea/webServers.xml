@@ -3,7 +3,7 @@
   <component name="WebServers">
     <option name="servers">
       <webServer id="d1bf9ebc-d789-44de-a6e2-48561eebfbe3" name="76开发机" url="http://10.6.131.76">
-        <fileTransfer host="10.6.131.76" port="22" rootFolder="/data01/home/wuxian" accessType="SFTP" username="wuxian">
+        <fileTransfer host="10.6.131.76" port="22" rootFolder="/data01/home/wuxian" accessType="SFTP" password="df93df9edf9cdf9edf9bdf98df9bdf9e" username="wuxian">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" />
           </advancedOptions>

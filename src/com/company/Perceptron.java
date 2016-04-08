@@ -2,6 +2,12 @@ package com.company;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -13,6 +19,7 @@ public class Perceptron {
     private Feature _model;
     private HashSet<String> _tagset = new HashSet<>();
     private Properties prop = new Properties();
+    private int numFeatures = 8;
 
     final public Feature CreateLocalFeature(String sentence, String tagSeq, int pos) {
         return CreateLocalFeature(sentence.split(" "), tagSeq.split(" "), pos);
@@ -53,9 +60,14 @@ public class Perceptron {
         else {
             prevTag = tags[pos - 1];
         }
+        // 修改的同时请修改numFeatures
         feature.add("u1:0_0:", words[pos], tags[pos]);
         feature.add("u2:-1_0:", prev1, tags[pos]);
         feature.add("u3:+1_0:", succ1, tags[pos]);
+        feature.add("u4:-1_0_0:", prev1+"_"+words[pos], tags[pos]);
+        feature.add("u5:0_1_0:", words[pos]+"_"+succ1, tags[pos]);
+        feature.add("u6:0+1_0:", words[pos].substring(0, 1), tags[pos]);
+        feature.add("u7:0-1_0:", words[pos].substring(words[pos].length()-1), tags[pos]);
         feature.add("b1:-1_0:", prevTag, tags[pos]);
         return feature;
     }
@@ -64,7 +76,7 @@ public class Perceptron {
         return CreateGlobalFeature(sentence.split(" "), tagSeq.split(" "));
     }
     final public Feature CreateGlobalFeature(String[] words, String[] tags) {
-        Feature feature = new Feature(words.length * 4);
+        Feature feature = new Feature(words.length * numFeatures);
         if (words.length != tags.length) {
             _logger.log(Level.SEVERE, String.format("missing word or tag: %s/%s",
                     String.join(" ", words), String.join(" ", tags)));
@@ -128,7 +140,8 @@ public class Perceptron {
         return ret.toString();
     }
 
-    final public boolean Train(File file, double learningRate, int maxIter, double thresh) throws IOException {
+    final public boolean Train(File file, double learningRate, int maxIter, double thresh, int numThreads)
+            throws IOException, InterruptedException {
         Scanner scanner = new Scanner(new FileInputStream(file));
         scanner.useDelimiter("\n\n");
         List<String> sentences = new ArrayList<>();
@@ -151,14 +164,74 @@ public class Perceptron {
             sentences.add(sentence.toString());
             tagSeqs.add(tagSeq.toString());
         }
-        return Train(sentences.toArray(new String[sentences.size()]),
-                tagSeqs.toArray(new String[tagSeqs.size()]), learningRate, maxIter, thresh);
+        if (numThreads == 1) {
+            return Train(sentences.toArray(new String[sentences.size()]),
+                    tagSeqs.toArray(new String[tagSeqs.size()]), learningRate, maxIter, thresh);
+        }
+        else {
+            return Train(sentences.toArray(new String[sentences.size()]),
+                    tagSeqs.toArray(new String[tagSeqs.size()]), learningRate, maxIter, thresh, numThreads);
+        }
+    }
+
+    final public boolean Train(String[] sentences, String[] tagSeqs, double learningRate, int maxIter,
+                               double thresh, int numThreads)
+            throws IOException, InterruptedException {
+        _logger.log(Level.INFO, String.format("Training started: %d sentences, %d features, %d threads.",
+                sentences.length, numFeatures, numThreads));
+        _model = new Feature(sentences.length * 7 * numFeatures);
+        double preErr = -100.0;
+        for (int iter = 1; iter <= maxIter; iter++) {
+            long startTime = System.currentTimeMillis();
+            final double[] err = {0.0};
+            final int[] finishedThreads = {0};
+            ReadWriteLock lock = new ReentrantReadWriteLock();
+            final Lock readLock = lock.readLock();
+            final Lock writeLock = lock.writeLock();
+            ExecutorService pool = Executors.newFixedThreadPool(numThreads);
+            for (int i = 0; i < sentences.length; i++) {
+                final int finalI = i;
+                final int finalIter = iter;
+                pool.submit(
+                        new Thread() {
+                            public void run() {
+                                readLock.lock();
+                                String tagSeqStar = Tag(sentences[finalI]);
+                                Feature featureStar = CreateGlobalFeature(sentences[finalI], tagSeqStar);
+                                Feature featureTrue = CreateGlobalFeature(sentences[finalI], tagSeqs[finalI]);
+                                readLock.unlock();
+                                featureTrue.MinusAssign(featureStar);
+                                writeLock.lock();
+                                err[0] += featureTrue.absSum();
+                                _model.PlusAssign(featureTrue.DotProductAssign(learningRate));
+                                if ((finishedThreads[0] + 1) % 1000 == 0)
+                                    System.out.println(String.format("Iter %d: %d/%d ", finalIter,
+                                            finishedThreads[0] +1, sentences.length));
+                                finishedThreads[0] += 1;
+                                writeLock.unlock();
+                            }
+                        }
+                );
+            }
+            pool.shutdown();
+            while (!pool.awaitTermination(30, TimeUnit.SECONDS)) {
+                System.out.println(String.format("30s report: Iter %d: %d/%d ", iter,
+                        finishedThreads[0] +1, sentences.length));
+            }
+            long endTime = System.currentTimeMillis();
+            System.out.println(String.format("Iter %d: err: %f time: %.3fs", iter, err[0], (endTime-startTime)/1000.0));
+            if (Math.abs(preErr - err[0]) < thresh)
+                break;
+            preErr = err[0];
+        }
+        _SaveModel(new File("result/model.txt"));
+        return true;
     }
 
     final public boolean Train(String[] sentences, String[] tagSeqs, double learningRate, int maxIter, double thresh)
             throws IOException {
         _logger.log(Level.INFO, String.format("Training started: %d sentences.", sentences.length));
-        _model = new Feature(sentences.length * 7 * 4);
+        _model = new Feature(sentences.length * 7 * numFeatures);
         double preErr = 100.0;
         for (int iter = 1; iter <= maxIter; iter++) {
             double err = 0.0;
@@ -173,7 +246,7 @@ public class Perceptron {
                     System.out.println(String.format("Iter %d: %d/%d\r", iter, i+1, sentences.length));
             }
             System.out.println(String.format("Iter %d: err: %f", iter, err));
-            if (Math.abs(preErr - err)/sentences.length < thresh)
+            if (Math.abs(preErr - err) < thresh)
                 break;
             preErr = err;
         }
